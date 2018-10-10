@@ -1,9 +1,6 @@
 PARSER_PATH=parser/
 
-all: l_zero l_um
-
-l_um:
-	ocamlbuild l1.native -I $(PARSER_PATH)
+all: l_zero
 
 l_zero:
 	ocamlbuild l0/l0BigStep.native

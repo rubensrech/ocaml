@@ -156,30 +156,32 @@ let rec comp (t: term) : code = match t with
 		List.append (comp t1) [Copy; JmpIfZero(1); Dec]
 
 
-let rec evalCode (c: code) (s: stack) : code * stack = match c with
-	| [] -> (c, s)
-	| i::c' ->
+let rec evalCode (c: code) (s: stack) (j: int) : code * stack * int = match c with
+	| [] -> (c, s, j)
+    | i::c' ->
+        let j' = j + 1 in
 		(match i with
-			| Push(n) -> evalCode c' (n::s)
-			| Pop -> evalCode c' s
+			| Push(n) -> evalCode c' (n::s) j'
+			| Pop -> evalCode c' s j'
 			| Copy -> 
 				let hd = List.hd s in
-					evalCode c' (hd::s)
+					evalCode c' (hd::s) j'
 			| Inc ->
 				let hd = List.hd s and
 					tl = List.tl s in
-					evalCode c' ((hd+1)::tl)
+					evalCode c' ((hd+1)::tl) j'
 			| Dec ->
 				let hd = List.hd s and
 					tl = List.tl s in
-					evalCode c' ((hd-1)::tl)
-			| Jump(n) -> evalCode (listDrop c' n) s
+				    evalCode c' ((hd-1)::tl) j'
+			| Jump(n) -> evalCode (listDrop c' n) s j'
 			| JmpIfZero(n) ->
 				let hd = List.hd s and
 					tl = List.tl s in
 					if hd = 0
-					then evalCode (listDrop c' n) tl
-					else evalCode c' tl)
+					then evalCode (listDrop c' n) tl j'
+                    else evalCode c' tl j'
+        )
 
 let evalStart (t: term) = 
 	print_string "> Input: ";
@@ -200,8 +202,9 @@ let compEval (t: term) =
 		print_endline "----- Code -----";
 		printCode code;
 		print_endline "----- Stack -----";
-		match (evalCode code []) with
-			| (code, stack) ->
+		match (evalCode code [] 0) with
+            | (code, stack, j) ->
+                print_endline ("Cost: " ^ (string_of_int j));
 				printStack stack
 
 

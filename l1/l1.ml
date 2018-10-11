@@ -151,56 +151,75 @@ let lookupEnv env (key: string) =
 let printEnv (env: environment) =
   mapList_print env termToString
 
-let rec eval (env: environment) (t: term) : term = match t with
-  | Int(n) -> Int(n)
-  | Bool(b) -> Bool(b)
-  | Id(x) -> lookupEnv env x
-  | Op(op, e1, e2) ->
-	let v1 = eval env e1 and
-	  v2 = eval env e2 in
-	  (match op, v1, v2 with
-		(* Arithmetic *)
-		| Plus, Int(n1), Int(n2) -> Int(n1 + n2)
-		| Minus, Int(n1), Int(n2) -> Int(n1 - n2)
-		| Times, Int(n1), Int(n2) -> Int(n1 * n2)
-		| Divide, Int(n1), Int(n2) -> Int(n1 / n2)
-		(* Logic *)
-		| LT, Int(n1), Int(n2) -> Bool(n1 < n2)
-		| LE, Int(n1), Int(n2) -> Bool(n1 <= n2)
-		| EQ, Int(n1), Int(n2) -> Bool(n1 = n2)
-		| NE, Int(n1), Int(n2) -> Bool(n1 <> n2)
-		| GE, Int(n1), Int(n2) -> Bool(n1 >= n2)
-		| GT, Int(n1), Int(n2) -> Bool(n1 > n2)
-		| _ -> raise (EvalError("Unrecognized op")))
-  | If(e1, e2, e3) when
-	(eval env e1) = Bool(true)
-	-> eval env e2
-  | If(e1, e2, e3) when
-	(eval env e1) = Bool(false)
-	-> eval env e3
-  | Fn(x, t, e) -> Closure(x, e, env)
-  | Apply(e1, e2) ->
-	(match (eval env e1) with
-	  | Closure(x, e, env') ->
-		let v' = eval env e2 in
-		  let env1 = updateEnv env' x v' in 
-			eval env1 e
-	  | RecClosure(f, x, e, env') ->
-		let v' = eval env e2 in
-		  let env1 = updateEnv env' x v' and
-			rC = RecClosure(f, x, e, env') in
-			let env2 = updateEnv env1 f rC in
-			  eval env2 e
-	  | _ -> raise (EvalError "Apply: expected Clousure"))
-  | Let(x, t, e1, e2) ->
-	let v' = eval env e1 in
-	  let env' = updateEnv env x v' in
-		eval env' e2
-  | LetRec(f, t1, Fn(x, t2, e1), e2) ->
-	let rC = RecClosure(f, x, e1, env) in
-	  let env' = updateEnv env f rC in
-		eval env' e2
-  | t' -> raise (EvalError("Unrecognized term: " ^ (termToString t')))
+let rec eval (env: environment) (t: term) (q: int) : term * int =
+    match t with
+    | Int(n) -> (Int(n), q)
+    | Bool(b) -> (Bool(b), q)
+    | Id(x) -> (lookupEnv env x, q+1)
+    | Op(op, e1, e2) ->
+        let q' = q + 1 and
+            v1 = eval env e1 0 and
+            v2 = eval env e2 0 in
+        let q1 = snd v1 and
+            q2 = snd v2 and
+            vr : Types.term = match op, fst v1, fst v2 with
+                (* Arithmetic *)
+                | Plus, Int(n1), Int(n2) -> Int(n1 + n2)
+                | Minus, Int(n1), Int(n2) -> Int(n1 - n2)
+                | Times, Int(n1), Int(n2) -> Int(n1 * n2)
+                | Divide, Int(n1), Int(n2) -> Int(n1 / n2)
+                (* Logic *)
+                | LT, Int(n1), Int(n2) -> Bool(n1 < n2)
+                | LE, Int(n1), Int(n2) -> Bool(n1 <= n2)
+                | EQ, Int(n1), Int(n2) -> Bool(n1 = n2)
+                | NE, Int(n1), Int(n2) -> Bool(n1 <> n2)
+                | GE, Int(n1), Int(n2) -> Bool(n1 >= n2)
+                | GT, Int(n1), Int(n2) -> Bool(n1 > n2)
+                | _ -> raise (EvalError("Unrecognized op"))
+                in
+                    (vr, q' + q1 + q2)
+    | If (e1, e2, e3) ->
+        let e1' = eval env e1 0 in
+        let v1 = fst e1' and
+            q1 = snd e1' in
+        let q' = q + 1 + q1 in
+            (match v1 with
+                | Bool(true) -> eval env e2 q'
+                | Bool(false) -> eval env e3 q'
+                | t' -> raise (EvalError("Expected bool, got: " ^ (termToString t'))))
+    | Fn(x, t, e) -> (Closure(x, e, env), q+1)
+    | Apply(e1, e2) ->
+        let e1' = eval env e1 0 and
+            e2' = eval env e2 0 in
+        let v1 = fst e1' and
+            v2 = fst e2' and
+            q1 = snd e1' and
+            q2 = snd e2' in
+            (match v1 with
+                | Closure(x, e, env') ->
+                    let q' = q + 1 + q1 + q2 and
+                        env1 = updateEnv env' x v2 in 
+                        eval env1 e q'
+                | RecClosure(f, x, e, env') ->
+                    let q' = q + 1 + q1 + q2 and
+                        env1 = updateEnv env' x v2 and
+                        rC = RecClosure(f, x, e, env') in
+                    let env2 = updateEnv env1 f rC in
+                        eval env2 e q'
+                | _ -> raise (EvalError "Apply: expected Clousure"))
+    | Let(x, t, e1, e2) ->
+        let e1' = eval env e1 0 in
+        let v1 = fst e1' and
+            q1 = snd e1' in
+        let env' = updateEnv env x v1 in
+        let q' = q + 1 + q1 in
+            eval env' e2 q'
+    | LetRec(f, t1, Fn(x, t2, e1), e2) ->
+        let rC = RecClosure(f, x, e1, env) in
+        let env' = updateEnv env f rC and
+            q' = q + 1 in
+                eval env' e2 q'
+    | t' -> raise (EvalError("Unrecognized term: " ^ (termToString t')))
 
 
 (* Compilation *)
@@ -425,8 +444,12 @@ let run (t: term) =
 	print_endline "> Input";
 	print_endline (termToString t);
 	print_string "> Output type: ";
-	print_endline (typeToString (typeInfer typesTable t));
-	print_endline ("> Output value: " ^ (termToString (eval emptyEnv t)))
+    print_endline (typeToString (typeInfer typesTable t));
+    let res = eval emptyEnv t 0 in
+    let e = fst res and
+        q = snd res in
+        print_endline ("> Output value: " ^ (termToString e));
+        print_endline ("> Cost: " ^ (string_of_int q))
 ;;
 
 let runComp (t: term)  = 
@@ -445,7 +468,7 @@ let _ =
 	try 
 		let lexbuf = Lexing.from_channel stdin in
 		let inputTerm = Parser.main Lexer.token lexbuf in
-			runComp inputTerm
+			run inputTerm
 	with 
 		| Parsing.Parse_error ->
 			print_endline "Syntax error"

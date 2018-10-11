@@ -89,32 +89,36 @@ let rec isNumericalVal (t: term) : bool = match t with
 	| _ -> false
 
 (* Main functions *)
-let rec eval (t: term) : term = match t with
-	| TmTrue -> TmTrue
-	| TmFalse -> TmFalse
-	| TmZero -> TmZero
+let rec eval (t: term) (q: int) : term * int =
+    let q' = q + 1 in
+    (match t with
+	| TmTrue -> (TmTrue, q)
+	| TmFalse -> (TmFalse, q)
+	| TmZero -> (TmZero, q)
 	| TmIf(t1,t2,t3) ->
-		(match (eval t1) with
-			| TmTrue -> eval t2
-			| TmFalse -> eval t3
+		(match (eval t1 q') with
+			| (TmTrue, q1) -> eval t2 q1
+			| (TmFalse, q1) -> eval t3 q1
 			| _ -> raise NoRuleApplies)
 	| TmSucc(t1) ->
-		let t1' = eval t1 in
-			if isNumericalVal t1'
-			then TmSucc(t1')
-			else raise NoRuleApplies
+        (match eval t1 q' with
+            | (t1', q1) ->
+                if (isNumericalVal t1')
+                then (TmSucc(t1'), q1)
+                else raise NoRuleApplies)
 	| TmPred(t1) ->
-		(match (eval t1) with
-			| TmZero -> TmZero
-			| TmSucc(t1') when
-				(isNumericalVal t1') -> t1'
+		(match eval t1 q' with
+			| (TmZero, q1) -> (TmZero, q1)
+            | (TmSucc(t1'), q1) when (isNumericalVal t1') ->
+                (t1', q1)
 			| _ -> raise NoRuleApplies)
 	| TmIsZero(t1) ->
-		(match (eval t1) with
-			| TmZero -> TmTrue
-			| TmSucc(t1') when
-				(isNumericalVal t1') -> TmFalse
-			| _ -> raise NoRuleApplies)
+		(match eval t1 q' with
+			| (TmZero, q1) -> (TmTrue, q1)
+            | (TmSucc(t1'), q1) when (isNumericalVal t1') ->
+                (TmFalse, q1)
+            | _ -> raise NoRuleApplies)
+    )
 
 let rec typeInfer (t: term) : termType = match t with
 	| TmTrue -> TypeBool			(* regra T-TRUE *)
@@ -156,31 +160,31 @@ let rec comp (t: term) : code = match t with
 		List.append (comp t1) [Copy; JmpIfZero(1); Dec]
 
 
-let rec evalCode (c: code) (s: stack) (j: int) : code * stack * int = match c with
-	| [] -> (c, s, j)
+let rec evalCode (c: code) (s: stack) (q: int) : code * stack * int = match c with
+	| [] -> (c, s, q)
     | i::c' ->
-        let j' = j + 1 in
+        let q' = q + 1 in
 		(match i with
-			| Push(n) -> evalCode c' (n::s) j'
-			| Pop -> evalCode c' s j'
+			| Push(n) -> evalCode c' (n::s) q'
+			| Pop -> evalCode c' s q'
 			| Copy -> 
 				let hd = List.hd s in
-					evalCode c' (hd::s) j'
+					evalCode c' (hd::s) q'
 			| Inc ->
 				let hd = List.hd s and
 					tl = List.tl s in
-					evalCode c' ((hd+1)::tl) j'
+					evalCode c' ((hd+1)::tl) q'
 			| Dec ->
 				let hd = List.hd s and
 					tl = List.tl s in
-				    evalCode c' ((hd-1)::tl) j'
-			| Jump(n) -> evalCode (listDrop c' n) s j'
+				    evalCode c' ((hd-1)::tl) q'
+			| Jump(n) -> evalCode (listDrop c' n) s q'
 			| JmpIfZero(n) ->
 				let hd = List.hd s and
 					tl = List.tl s in
 					if hd = 0
-					then evalCode (listDrop c' n) tl j'
-                    else evalCode c' tl j'
+					then evalCode (listDrop c' n) tl q'
+                    else evalCode c' tl q'
         )
 
 let evalStart (t: term) = 
@@ -193,8 +197,13 @@ let evalStart (t: term) =
 
 let bigStepEval (t: term) =
 	evalStart t;
-	print_string "> Output value: ";
-	print_endline (termToString (eval t))
+    let s = eval t 0 in
+        (match s with
+            | (t1, q) ->
+                print_endline ("> Output value: " ^ (termToString t1));
+                print_endline ("> Cost: " ^ (string_of_int q))
+        )
+	    
 
 let compEval (t: term) =
 	evalStart t;
@@ -203,8 +212,8 @@ let compEval (t: term) =
 		printCode code;
 		print_endline "----- Stack -----";
 		match (evalCode code [] 0) with
-            | (code, stack, j) ->
-                print_endline ("Cost: " ^ (string_of_int j));
+            | (code, stack, q) ->
+                print_endline ("Cost: " ^ (string_of_int q));
 				printStack stack
 
 
@@ -216,4 +225,4 @@ let tif = TmIf(t1,t2,t3);;
 let t4 = TmIsZero(TmSucc(TmZero));;
 let t5 = TmIsZero(tif);;
 
-compEval t4
+bigStepEval tif

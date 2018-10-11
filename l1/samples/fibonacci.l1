@@ -4,4 +4,4 @@ let rec fib : (int -> int) =
         then 1
         else (fib (x-1)) + (fib (x-2)))
     in
-        fib 10
+        fib 5

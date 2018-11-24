@@ -4,4 +4,4 @@ let rec fat : (int -> int) =
         then 1
         else (x * (fat (x-1))))
     in 
-        fat 5
+        fat 9

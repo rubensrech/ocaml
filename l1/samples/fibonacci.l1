@@ -4,4 +4,22 @@ let rec fib : (int -> int) =
         then 1
         else (fib (x-1)) + (fib (x-2)))
     in
-        fib 5
+        fib 40
+
+
+
+
+
+
+ let rec max (l:list int)  : int =
+    match l with
+       [] -> 0
+       (h::t) -> if  h < 0 
+                   then (max t)
+                   else h
+
+
+                 let m = max t in
+                    if h < m then m else h   
+
+

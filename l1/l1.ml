@@ -121,6 +121,50 @@ exception EvalError of string
 
 let emptyEnv: environment = [];;
 
+let rec countOccurrences (v: string) (t: term) (c: int) : int =
+    match t with
+    | Int(n) -> c
+    | Bool(b) -> c
+    | Id(x) ->
+        if x = v
+        then (c + 1)
+        else c
+    | Op(op, e1, e2) ->
+        let c1 = countOccurrences v e1 0 and
+            c2 = countOccurrences v e2 0 in
+            (c + c1 + c2)
+    | If (e1, e2, e3) ->
+        let c1 = countOccurrences v e1 0 and
+            c2 = countOccurrences v e2 0 and
+            c3 = countOccurrences v e3 0 in
+            (c + c1 + c2 + c3)
+    | Fn(x, t, e) ->
+        if x = v
+        then c  (* new scope -> ignore occurrences *)
+        else 
+            let c1 = countOccurrences v e 0 in
+                (c + c1)
+    | Apply(e1, e2) ->
+        let c1 = countOccurrences v e1 0 and
+            c2 = countOccurrences v e2 0 in
+            (c + c1 + c2)
+    | Let(x, t, e1, e2) ->
+        let c2 = countOccurrences v e2 0 in
+            if x = v
+            then (c + c2)  (* new scope -> ignore occurrences *)
+            else
+                let c1 = countOccurrences v e1 0 in
+                    (c + c1 + c2)
+    | LetRec(f, t1, e1, e2) ->
+        let c2 = countOccurrences v e2 0 in
+            if f = v
+            then (c + c2)  (* new scope -> ignore occurrences *)
+            else
+                let c1 = countOccurrences v e1 0 in
+                    (c + c1 + c2)
+    | _ -> c
+
+
 (* val opToString : op -> string *)
 let opToString (op: op) : string = match op with
     | Plus -> "+"
